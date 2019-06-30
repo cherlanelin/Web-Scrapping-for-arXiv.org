@@ -1,0 +1,229 @@
+---
+title: "sample for web scraping"
+author: "Cherlane"
+date: "June 27, 2019"
+output: html_document
+---
+
+Function "ipak" is a powerful function developed by Yifan Wu, a PhD student from department of statistics and actuarial science. To load all the required packages/library in our analysis, we suggest to run this function at the beginning.
+```{r,warning=FALSE,message=FALSE}
+# Function Ipak for Detecting and Installing the Packages
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg)) 
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+
+# The list/vector with the name of the packages you need in the further analysis coding.
+packages <- c("tidyverse",  # General-purpose data wrangling
+              "rvest",  # Parsing of HTML/XML files  
+              "stringr",    # String manipulation
+              "rebus",      # Verbose regular expressions
+              "lubridate",   # Eases DateTime manipulation
+              "aRxiv",   # Package for communicating to aRvix.org API and get update information
+              "RPostgreSQL", # Package for communicating to PostgreSQL
+              "RCurl",   
+              "rjson")
+
+# Passing the list/vector of package name to the function to check the installation of the packages
+ipak(packages)
+```
+
+
+### Read the HTML code from the website with latest 20 submissions
+```{r}
+n = 40
+url = paste("https://arxiv.org/list/cs/new?skip=0&show=",n,sep="")
+
+
+#Reading the HTML code from the website
+webpage <- read_html(url)
+
+webpage%>%html_attrs()
+
+
+## Get the Link of the newest paper
+link.1=webpage%>%html_nodes("#dlpage > dl:nth-child(10) > dt:nth-child(1) > span:nth-child(2) > a:nth-child(1)")%>%html_text
+
+## Get the Title of the newest paper
+all.1 = webpage%>%html_nodes("#dlpage > dl:nth-child(10) > dd:nth-child(2) > div:nth-child(1) > div:nth-child(1)")%>%html_text
+
+## Get All the information of the newest paper
+all.1 = webpage%>%html_nodes("#dlpage > dl:nth-child(10) > dd:nth-child(2) > div:nth-child(1)")%>%html_text
+
+## Get All the information of the second newest paper
+all.2 = webpage%>%html_nodes("#dlpage > dl:nth-child(10) > dd:nth-child(4) > div:nth-child(1)")%>%html_text
+```
+
+### Extract the title, author name and description with some text cleaning
+```{r}
+all.1.clean = unlist(strsplit(all.1,split='\n\n\n', fixed=TRUE))
+all.1.clean
+
+all.1.title = substr(all.1.clean[1],10,nchar(all.1.clean[1]))
+all.1.title
+
+all.1.author= str_remove_all(substr(all.1.clean[2],10,nchar(all.1.clean[2])), "\n")
+all.1.author
+
+all.1.description = str_remove_all(all.1.clean[length(all.1.clean)],"\n")
+all.1.description
+```
+
+```{r}
+all.2.clean = unlist(strsplit(all.2,split='\n\n\n', fixed=TRUE))
+all.2.clean
+
+all.2.title = substr(all.2.clean[1],10,nchar(all.1.clean[1]))
+all.2.title
+
+all.2.author= str_remove_all(substr(all.2.clean[2],10,nchar(all.2.clean[2])), "\n")
+all.2.author
+
+all.2.description = str_remove_all(all.2.clean[length(all.2.clean)],"\n")
+all.2.description
+```
+
+
+### Clean the Link and Make-up the Possible HTML Address
+* The http address link looks like: https://arxiv.org/abs/1906.11282
+* The link we have looks like: arXiv:1906.11282
+```{r}
+link.1.make = paste("https://arxiv.org/abs/", substr(link.1,7,nchar(link.1)),sep = "")
+link.1.make
+```
+
+### Function for Getting the information of the newest n-th papers from the total N newest paper 
+```{r}
+N = 40
+url = paste("https://arxiv.org/list/cs/new?skip=0&show=",N,sep="")
+#Reading the HTML code from the website
+webpage <- read_html(url)
+
+get.nth.paper = function(n,N,webpage){
+  if (n>N){
+    print("Exceeding the limit N, only give the information of the N-th newest paper ")
+    n = N}
+  
+    webpage.local = webpage
+    ## Get the Link of the newest paper
+    link=webpage.local%>%html_nodes(paste("#dlpage > dl:nth-child(10) > dt:nth-child(",2*n-1,") > span:nth-child(2) > a:nth-child(1)", sep = ""))%>%html_text
+    
+    link.make = paste("https://arxiv.org/abs/", substr(link,7,nchar(link)),sep = "")
+    
+    ## Get All the information of the newest paper
+    all= webpage.local%>%html_nodes(paste("#dlpage > dl:nth-child(10) > dd:nth-child(",2*n,") > div:nth-child(1)", sep = ""))%>%html_text
+    
+    all.clean = unlist(strsplit(all,split='\n\n\n', fixed=TRUE))
+  
+    all.title = substr(all.clean[1],10,nchar(all.clean[1]))
+    
+    all.author= str_remove_all(substr(all.clean[2],10,nchar(all.clean[2])), "\n")
+    
+    all.description = str_remove_all(all.clean[length(all.clean)],"\n")
+  
+    all.final = data.frame(link = link,
+                           link_makeup = link.make,
+                           title = all.title,
+                           author = all.author,
+                           description = all.description)
+    return(all.final)
+}
+
+## Test
+get.nth.paper(35,40,webpage)
+```
+
+### Function for getting the information of the N newest paper from arXiv
+```{r}
+get.all.N.paper = function(N){
+  all.N = data.frame(matrix(ncol = 5, nrow = 1))
+  colnames(all.N) <- c("link", "link_makeup", 
+                       "title", "author", 
+                       "description")
+  url.local = paste("https://arxiv.org/list/cs/new?skip=0&show=",N,sep="")
+  #Reading the HTML code from the website
+  webpage.local <- read_html(url.local)
+  for (n in 1:N){
+     nth.paper = get.nth.paper(n,N,webpage.local)
+     all.N = rbind(all.N, nth.paper)
+  }
+all.N = all.N[-1,]
+return(all.N)
+}
+
+## Test
+df = get.all.N.paper(70)
+```
+
+### Function for checking the new publications on a given day
+```{r}
+# Example of checking new publication
+n.new = arxiv_count('submittedDate:[201906271230* TO 201906281230*] AND cat:cs*')
+n.new
+
+get.today.cs.paper = function(){
+  format(Sys.Date(), "YYYYMMDD")
+  today = Sys.Date()
+  today.date = str_remove_all(as.character(today),"-")
+  yester.date = str_remove_all(as.character(today-1),"-")
+  search.query= paste("submittedDate:[",yester.date,"1231* TO ",today.date,"1230*] AND cat:cs*", sep = "")
+  today.num = arxiv_count(search.query)
+  if (today.num > 0 ){
+  today.paper = get.all.N.paper(today.num)
+  return(today.paper)}else{
+    print(paste("no new paper has submitted from",today-1,"to",today))
+    all.N = data.frame(matrix(ncol = 5, nrow = 1))
+    colnames(all.N) <- c("link", "link_makeup", 
+                       "title", "author", 
+                       "description")
+    return(all.N)
+  }
+}
+
+today.paper = get.today.cs.paper()
+```
+
+### Connecting to PostgreSQL
+```{r}
+pg <- dbDriver("PostgreSQL")
+con <- dbConnect(pg, host="localhost", user="postgres",password = "aptx0330")
+
+# Create a table in postgre SQL with the meta data collect from June 27 to June 29, 2019
+# n.new = arxiv_count('submittedDate:[201906270000* TO 201906291230*] AND cat:cs*')
+# n.new
+# df = get.all.N.paper(n.new)
+# 
+# # Reverse the order to make sure the latest paper is in the last line
+# df = df%>%map_df(rev)
+# dbWriteTable(con,'cs_paper_meta',df, row.names=FALSE)
+```
+
+### Update Existing Table in PostgreSQL
+```{r}
+today.paper = get.today.cs.paper()
+if ((nrow(na.omit(today.paper))) != 0){
+  today.paper = today.paper%>%map_df(rev)
+  dbWriteTable(con,'cs_paper_meta',today.paper, append = TRUE, row.names=FALSE)
+}
+dbDisconnect(con)
+```
+
+### Export a dataset containing all the meta data for the paper submitted last week
+```{r}
+# pg <- dbDriver("PostgreSQL")
+# con <- dbConnect(pg, host="localhost", user="postgres",password = "aptx0330")
+# 
+# # Create a table in postgre SQL with the meta data collect from June 27 to June 29, 2019
+# n.week = arxiv_count('submittedDate:[201906270000* TO 201906300000*] AND cat:cs*')
+# 
+# df.week = get.all.N.paper(n.week)
+# 
+# 
+# df.week = df.week%>%map_df(rev)
+# dbWriteTable(con,'cs_paper_2019_0627',df.week, row.names=FALSE)
+# dbDisconnect(con)
+```
+
