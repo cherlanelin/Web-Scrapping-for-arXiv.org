@@ -31,6 +31,15 @@ packages <- c("tidyverse",  # General-purpose data wrangling
 ipak(packages)
 ```
 
+### Check the number of new papers
+```{r}
+url.full = "https://arxiv.org/list/cs/new"
+webpage.full = read_html(url.full)
+try = webpage.full%>%html_nodes("#dlpage > dl:nth-child(10)")%>%html_text
+try.2= unlist(strsplit(try,split='\n\n\n\n[', fixed=TRUE))
+length(try.2)
+```
+
 
 ### Read the HTML code from the website with latest 20 submissions
 ```{r}
@@ -42,7 +51,6 @@ url = paste("https://arxiv.org/list/cs/new?skip=0&show=",n,sep="")
 webpage <- read_html(url)
 
 webpage%>%html_attrs()
-
 
 ## Get the Link of the newest paper
 link.1=webpage%>%html_nodes("#dlpage > dl:nth-child(10) > dt:nth-child(1) > span:nth-child(2) > a:nth-child(1)")%>%html_text
@@ -70,20 +78,6 @@ all.1.author
 
 all.1.description = str_remove_all(all.1.clean[length(all.1.clean)],"\n")
 all.1.description
-```
-
-```{r}
-all.2.clean = unlist(strsplit(all.2,split='\n\n\n', fixed=TRUE))
-all.2.clean
-
-all.2.title = substr(all.2.clean[1],10,nchar(all.1.clean[1]))
-all.2.title
-
-all.2.author= str_remove_all(substr(all.2.clean[2],10,nchar(all.2.clean[2])), "\n")
-all.2.author
-
-all.2.description = str_remove_all(all.2.clean[length(all.2.clean)],"\n")
-all.2.description
 ```
 
 
@@ -136,9 +130,9 @@ get.nth.paper = function(n,N,webpage){
 get.nth.paper(35,40,webpage)
 ```
 
-### Function for getting the information of the N newest paper from arXiv
+### Function for getting the information of the first N paper from https://arxiv.org/list/cs/new
 ```{r}
-get.all.N.paper = function(N){
+get.first.N.paper = function(N){
   all.N = data.frame(matrix(ncol = 5, nrow = 1))
   colnames(all.N) <- c("link", "link_makeup", 
                        "title", "author", 
@@ -155,75 +149,95 @@ return(all.N)
 }
 
 ## Test
-df = get.all.N.paper(70)
+first.70 = get.first.N.paper(70)
 ```
 
-### Function for checking the new publications on a given day
-```{r}
-# Example of checking new publication
-n.new = arxiv_count('submittedDate:[201906271230* TO 201906281230*] AND cat:cs*')
-n.new
 
-get.today.cs.paper = function(){
-  format(Sys.Date(), "YYYYMMDD")
-  today = Sys.Date()
-  today.date = str_remove_all(as.character(today),"-")
-  yester.date = str_remove_all(as.character(today-1),"-")
-  search.query= paste("submittedDate:[",yester.date,"1231* TO ",today.date,"1230*] AND cat:cs*", sep = "")
-  today.num = arxiv_count(search.query)
-  if (today.num > 0 ){
-  today.paper = get.all.N.paper(today.num)
-  return(today.paper)}else{
-    print(paste("no new paper has submitted from",today-1,"to",today))
-    all.N = data.frame(matrix(ncol = 5, nrow = 1))
-    colnames(all.N) <- c("link", "link_makeup", 
-                       "title", "author", 
-                       "description")
-    return(all.N)
-  }
+### Function for checking the number of new submission papers on the website
+```{r}
+get.new.num = function(){
+   url.full = "https://arxiv.org/list/cs/new"
+   webpage.full = read_html(url.full)
+   all.papers= webpage.full%>%html_nodes("#dlpage > dl:nth-child(10)")%>%html_text
+   all.papers.num = length(unlist(strsplit(all.papers,split='\n\n\n\n[', fixed=TRUE)))
+   return(all.papers.num)
 }
 
-today.paper = get.today.cs.paper()
+# test
+get.new.num()
 ```
 
-### Connecting to PostgreSQL
+
+### Function for getting the information of the latest N paper from https://arxiv.org/list/cs/new
+```{r}
+get.last.N.paper = function(N){
+  all.N = data.frame(matrix(ncol = 5, nrow = 1))
+  colnames(all.N) <- c("link", "link_makeup", 
+                       "title", "author", 
+                       "description")
+  n.new = get.new.num()
+  url.full = "https://arxiv.org/list/cs/new"
+  webpage.full = read_html(url.full)
+  for (n in n.new:(n.new-N+1)){
+     nth.paper = get.nth.paper(n,n.new,webpage.full)
+     all.N = rbind(all.N, nth.paper)
+  }
+  all.N = all.N[-1,]
+  return(all.N)
+}
+
+latest.70 = get.last.N.paper(70)
+```
+
+
+### Function for getting all new submission papers on the website
+```{r}
+get.all.paper = function(){
+  n.all = get.new.num()
+  df.all = get.first.N.paper(n.all)
+  return(df.all)
+}
+
+# test 
+all.new.paper = get.all.paper()
+```
+
+
+### Connecting to PostgreSQL and create the initial dataset 'cs_paper_meta'
 ```{r}
 pg <- dbDriver("PostgreSQL")
 con <- dbConnect(pg, host="localhost", user="postgres",password = "aptx0330")
 
-# Create a table in postgre SQL with the meta data collect from June 27 to June 29, 2019
-# n.new = arxiv_count('submittedDate:[201906270000* TO 201906291230*] AND cat:cs*')
+# # Create a table in postgre SQL with the meta data collect from June 27 to June 29, 2019
+# n.new = arxiv_count('(cat:cs.AI OR cat:cs.CL OR cat:cs.CC OR cat:cs.CE OR cat:cs.CG OR cat:cs.GT OR cat:cs.CV OR cat:cs.CY OR cat:cs.CR OR cat:cs.DS OR cat:cs.DB OR cat:cs.DL OR cat:cs.DM OR cat:cs.DC OR cat:cs.ET OR cat:cs.FL OR cat:cs.GL OR cat:cs.GR OR cat:cs.AR OR cat:cs.HC OR cat:cs.IR OR cat:cs.IT OR cat:cs.LO OR cat:cs.LG OR cat:cs.MS OR cat:cs.MA OR cat:cs.MM OR cat:cs.NI OR cat:cs.NE OR cat:cs.NA OR cat:cs.OS OR cat:cs.OH OR cat:cs.PF OR cat:cs.PL OR cat:cs.RO OR cat:cs.SI OR cat:cs.SE OR cat:cs.SD OR cat:cs.SC OR cat:cs.SY OR cat:cs.CC) AND submittedDate:[201906270000* TO 201906290000*]')
 # n.new
 # df = get.all.N.paper(n.new)
 # 
 # # Reverse the order to make sure the latest paper is in the last line
 # df = df%>%map_df(rev)
-# dbWriteTable(con,'cs_paper_meta',df, row.names=FALSE)
+# dbWriteTable(con,'cs_paper_meta',all.new.paper, row.names=FALSE)
 ```
 
-### Update Existing Table in PostgreSQL
+
+### Function for checking the new submission in all new submissions and updating the existed dataframe
 ```{r}
-today.paper = get.today.cs.paper()
-if ((nrow(na.omit(today.paper))) != 0){
-  today.paper = today.paper%>%map_df(rev)
-  dbWriteTable(con,'cs_paper_meta',today.paper, append = TRUE, row.names=FALSE)
+get.new.submission = function(new.paper){
+  pg <- dbDriver("PostgreSQL")
+  con <- dbConnect(pg, host="localhost", user="postgres",password = "aptx0330")
+  df.existed.link = dbGetQuery(con, "SELECT link from cs_paper_meta")$link
+  paper.new.submit = subset(new.paper, !(new.paper$link %in% df.existed.link))
+  if ((nrow(na.omit(paper.new.submit))) != 0){
+  dbWriteTable(con,'cs_paper_meta',paper.new.submit, append = TRUE, row.names=FALSE)
+  }else{
+  print("All the papers from the scrapping are already existed in our database")
 }
-dbDisconnect(con)
+
+dbDisconnect(con)  
+}
+
+get.new.submission(paper.new.submit)
+
 ```
 
-### Export a dataset containing all the meta data for the paper submitted last week
-```{r}
-# pg <- dbDriver("PostgreSQL")
-# con <- dbConnect(pg, host="localhost", user="postgres",password = "aptx0330")
-# 
-# # Create a table in postgre SQL with the meta data collect from June 27 to June 29, 2019
-# n.week = arxiv_count('submittedDate:[201906270000* TO 201906300000*] AND cat:cs*')
-# 
-# df.week = get.all.N.paper(n.week)
-# 
-# 
-# df.week = df.week%>%map_df(rev)
-# dbWriteTable(con,'cs_paper_2019_0627',df.week, row.names=FALSE)
-# dbDisconnect(con)
-```
+
 
