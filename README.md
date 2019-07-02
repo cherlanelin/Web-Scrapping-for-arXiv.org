@@ -8,4 +8,14 @@ Using R to check the update of the CS papers and get the meta data of the papers
 2. PostgreSQL
 3. Apache Docker and Airflow
 
-### 
+### Introduction of R and Rmarkdown files: R Script for Scrapping Paper Information from Archive.R/Rmd
+These two files are almost the same, both containing the important functions for scrapping the meta data from the website nad updating the database in postgreSQL:
+1. get.new.num()
+2. get.first.N.paper()
+3. get.last.N.paper()
+4. get.all.paper()
+5. pass.new.submission()
+6. main.paper.update()
+
+The difference between them is that the Rmarkdown contains more comments and test code for you to make sure the execution of the code, while the R script only runs the main.paper.update() at the end of th script and will be passed to the DAG file for scheduling.
+
