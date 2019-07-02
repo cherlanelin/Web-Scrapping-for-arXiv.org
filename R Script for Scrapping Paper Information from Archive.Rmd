@@ -42,11 +42,14 @@ get.nth.paper = function(n,N,webpage){
     ## Get the Link of the newest paper
     link=webpage.local%>%html_nodes(paste("#dlpage > dl:nth-child(10) > dt:nth-child(",2*n-1,") > span:nth-child(2) > a:nth-child(1)", sep = ""))%>%html_text
     
+    # Text cleaning of the link (a generated link that can probably access to the page of the given paper)
     link.make = paste("https://arxiv.org/abs/", substr(link,7,nchar(link)),sep = "")
     
     ## Get All the information of the newest paper
+    # The raw text with all the information of the given paper
     all= webpage.local%>%html_nodes(paste("#dlpage > dl:nth-child(10) > dd:nth-child(",2*n,") > div:nth-child(1)", sep = ""))%>%html_text
     
+    # Seperate the text information with little cleaning
     all.clean = unlist(strsplit(all,split='\n\n\n', fixed=TRUE))
   
     all.title = substr(all.clean[1],10,nchar(all.clean[1]))
@@ -77,7 +80,7 @@ get.new.num = function(){
 ```
 
 
-### Function for getting the information of the first(oldest) N paper from https://arxiv.org/list/cs/new
+### Function for getting the information of the first(oldest) N papers from https://arxiv.org/list/cs/new
 ```{r}
 get.first.N.paper = function(N){
   all.N = data.frame(matrix(ncol = 5, nrow = 1))
@@ -86,28 +89,30 @@ get.first.N.paper = function(N){
                        "description")
   all.paper.num = get.new.num()
   if (N<=all.paper.num){
-  url.local = paste("https://arxiv.org/list/cs/new?skip=0&show=",N,sep="")
-  #Reading the HTML code from the website
-  webpage.local <- read_html(url.local)
-  for (n in 1:N){
-     nth.paper = get.nth.paper(n,N,webpage.local)
-     all.N = rbind(all.N, nth.paper)
-  }
-  all.N = all.N[-1,]
-  return(all.N)}else{
-    print(paste("Total number of paper on this site is only",all.paper.num))
-    for (n in 1:all.paper.num){
-      nth.paper = get.nth.paper(n,all.paper.num,webpage.local)
+    url.local = paste("https://arxiv.org/list/cs/new?skip=0&show=",N,sep="")
+    #Reading the HTML code from the website
+    webpage.local <- read_html(url.local)
+    print(paste(N,"papers' meta data have been scrapping from the https://arxiv.org/list/cs/new"))
+    for (n in 1:N){
+      nth.paper = get.nth.paper(n,N,webpage.local)
       all.N = rbind(all.N, nth.paper)
     }
-  all.N = all.N[-1,]
-  return(all.N)
-  }
+    all.N = all.N[-1,]
+    return(all.N)}else{
+      print(paste("Total number of paper on this site is only",all.paper.num))
+      for (n in 1:all.paper.num){
+        nth.paper = get.nth.paper(n,all.paper.num,webpage.local)
+        all.N = rbind(all.N, nth.paper)
+      }
+      all.N = all.N[-1,]
+      return(all.N)
+    }
 }
 ```
 
 
-### Function for getting the information of the latest N paper from https://arxiv.org/list/cs/new
+### Function for getting the information of the latest N papers from https://arxiv.org/list/cs/new
+#### The latest papers are added at the latter of the pagge
 ```{r}
 get.last.N.paper = function(N){
   all.N = data.frame(matrix(ncol = 5, nrow = 1))
@@ -118,52 +123,76 @@ get.last.N.paper = function(N){
   url.full = "https://arxiv.org/list/cs/new"
   webpage.full = read_html(url.full)
   if (N<=n.new){
+    print(paste(N,"papers' meta data have been scrapping from the https://arxiv.org/list/cs/new"))
     for (n in n.new:(n.new-N+1)){
-       nth.paper = get.nth.paper(n,n.new,webpage.full)
-       all.N = rbind(all.N, nth.paper)
+      nth.paper = get.nth.paper(n,n.new,webpage.full)
+      all.N = rbind(all.N, nth.paper)
     }
     all.N = all.N[-1,]
     return(all.N)}else{
-      print(paste("Total number of paper on this site is only",n.new))
+      print(paste("Total number of paper on this site is only",n.new, ". Scrapping all of their information from the website"))
       for (n in n.new:1){
-       nth.paper = get.nth.paper(n,n.new,webpage.full)
-       all.N = rbind(all.N, nth.paper)
-    }
-    all.N = all.N[-1,]
-    return(all.N)
+        nth.paper = get.nth.paper(n,n.new,webpage.full)
+        all.N = rbind(all.N, nth.paper)
+      }
+      all.N = all.N[-1,]
+      return(all.N)
     }
 }
 ```
+
 
 ### Function for getting all new submission papers on the website
 ```{r}
 get.all.paper = function(){
   n.all = get.new.num()
+  print(paste("Totally", n.all, "new submitted papers are detetced on the website. Scrapping all of their meta data" ))
   df.all = get.first.N.paper(n.all)
   return(df.all)
 }
 ```
 
+
+### test above functions
+```{r}
+paper.first10 = get.first.N.paper(10)
+paper.last10 = get.last.N.paper(10)
+paper.all = get.all.paper()
+```
+
+### Create meta dataset for airflow, just need to run at the first time
+```{r}
+# pg <- dbDriver("PostgreSQL")
+# con <- dbConnect(pg, host="localhost", dbname = "airflow" ,user="postgres",port=5432, password = "aptx0330")
+# dbWriteTable(con,'cs_paper_meta',paper, append = TRUE, row.names=FALSE)
+# dbDisconnect(con)  
+```
+
 ### Function for checking the new submission in all new submissions and updating the existed dataframe
 ```{r}
-get.new.submission = function(new.paper){
+pass.new.submission = function(new.paper){
   pg <- dbDriver("PostgreSQL")
-  con <- dbConnect(pg, host="localhost", user="postgres",password = "aptx0330")
+  
+  # Pass the user and database information in SQL. Please chancge them to your case to connect to postgre SQL
+  con <- dbConnect(pg, host="localhost", dbname = "airflow" ,user="postgres",port=5432, password = "aptx0330")
+  
+  ## Check the existed papers, and update the database if there are new paper detected from our scarpping 
   df.existed.link = dbGetQuery(con, "SELECT link from cs_paper_meta")$link
   paper.new.submit = subset(new.paper, !(new.paper$link %in% df.existed.link))
   if ((nrow(na.omit(paper.new.submit))) != 0){
-  dbWriteTable(con,'cs_paper_meta',paper.new.submit, append = TRUE, row.names=FALSE)
+    print(paste(nrow(paper.new.submit),"new papers have been submitted. Updating them to our database."))
+    dbWriteTable(con,'cs_paper_meta',paper.new.submit, append = TRUE, row.names=FALSE)
   }else{
-  print("All the papers from the scrapping are already existed in our database")
+    print("All the papers from the scrapping are already existed in our database")
 }
 
 dbDisconnect(con)  
 }
 ```
 
-
 ### Main function for checking the new submission from the first/latest N papers (or all)
 ```{r}
+# Based on customer's selection, you can decide updating N latest/first submission papers, or updating all the papers in the website 
 main.paper.update = function(n = 50, paper = "latest", all = FALSE){
   if (all == TRUE){
     paper = get.all.paper()
@@ -173,9 +202,20 @@ main.paper.update = function(n = 50, paper = "latest", all = FALSE){
     paper = get.first.N.paper(n)
   }
   
-  get.new.submission(paper)
+  pass.new.submission(paper)
 }
 
-main.paper.update(n=300)
+main.paper.update(n=300, all = TRUE)
+```
+
+
+### Testing: check imported meta data of the papers
+```{r}
+pg <- dbDriver("PostgreSQL")
+
+## Rewrite the infomration of your postgreSQL
+con <- dbConnect(pg, host="localhost", dbname = "airflow" ,user="postgres",port=5432, password = "aptx0330")
+df.existed = dbGetQuery(con, "SELECT * from cs_paper_meta")
+dbDisconnect(con) 
 ```
 

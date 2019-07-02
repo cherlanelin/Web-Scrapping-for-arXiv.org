@@ -80,6 +80,7 @@ get.first.N.paper = function(N){
     url.local = paste("https://arxiv.org/list/cs/new?skip=0&show=",N,sep="")
     #Reading the HTML code from the website
     webpage.local <- read_html(url.local)
+    print(paste(N,"papers' meta data have been scrapping from the https://arxiv.org/list/cs/new"))
     for (n in 1:N){
       nth.paper = get.nth.paper(n,N,webpage.local)
       all.N = rbind(all.N, nth.paper)
@@ -108,13 +109,14 @@ get.last.N.paper = function(N){
   url.full = "https://arxiv.org/list/cs/new"
   webpage.full = read_html(url.full)
   if (N<=n.new){
+    print(paste(N,"papers' meta data have been scrapping from the https://arxiv.org/list/cs/new"))
     for (n in n.new:(n.new-N+1)){
       nth.paper = get.nth.paper(n,n.new,webpage.full)
       all.N = rbind(all.N, nth.paper)
     }
     all.N = all.N[-1,]
     return(all.N)}else{
-      print(paste("Total number of paper on this site is only",n.new))
+      print(paste("Total number of paper on this site is only",n.new, ". Scrapping all of their information from the website"))
       for (n in n.new:1){
         nth.paper = get.nth.paper(n,n.new,webpage.full)
         all.N = rbind(all.N, nth.paper)
@@ -124,22 +126,26 @@ get.last.N.paper = function(N){
     }
 }
 
-
 # Function for getting all new submission papers on the website
 get.all.paper = function(){
   n.all = get.new.num()
+  print(paste("Totally", n.all, "new submitted papers are detetced on the website. Scrapping all of their meta data" ))
   df.all = get.first.N.paper(n.all)
   return(df.all)
 }
 
-
 # Function for checking the new submission in all new submissions and updating the existed dataframe
-get.new.submission = function(new.paper){
+pass.new.submission = function(new.paper){
   pg <- dbDriver("PostgreSQL")
-  con <- dbConnect(pg, host="localhost", user="postgres",password = "aptx0330")
+  
+  # Pass the user and database information in SQL. Please chancge them to your case to connect to postgre SQL
+  con <- dbConnect(pg, host="localhost", dbname = "airflow" ,user="postgres",port=5432, password = "aptx0330")
+  
+  ## Check the existed papers, and update the database if there are new paper detected from our scarpping 
   df.existed.link = dbGetQuery(con, "SELECT link from cs_paper_meta")$link
   paper.new.submit = subset(new.paper, !(new.paper$link %in% df.existed.link))
   if ((nrow(na.omit(paper.new.submit))) != 0){
+    print(paste(nrow(paper.new.submit),"new papers have been submitted. Updating them to our database."))
     dbWriteTable(con,'cs_paper_meta',paper.new.submit, append = TRUE, row.names=FALSE)
   }else{
     print("All the papers from the scrapping are already existed in our database")
@@ -151,6 +157,8 @@ get.new.submission = function(new.paper){
 
 
 # Main function for checking the new submission from the first/latest N papers (or all)
+# Based on customer's selection, you can decide updating N latest/first submission papers, 
+# or updating all the papers in the website 
 main.paper.update = function(n = 50, paper = "latest", all = FALSE){
   if (all == TRUE){
     paper = get.all.paper()
@@ -160,7 +168,10 @@ main.paper.update = function(n = 50, paper = "latest", all = FALSE){
     paper = get.first.N.paper(n)
   }
   
-  get.new.submission(paper)
+  pass.new.submission(paper)
 }
+
+
+
 
 main.paper.update(n=300)
