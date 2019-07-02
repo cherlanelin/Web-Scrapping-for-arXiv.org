@@ -6,4 +6,6 @@ Using R to check the update of the CS papers and get the meta data of the papers
 ### Prerequsites of the project
 1. R with package rvest, stringr, RPostgreSQL
 2. PostgreSQL
-3. Apache Airflow
+3. Apache Docker and Airflow
+
+### 
