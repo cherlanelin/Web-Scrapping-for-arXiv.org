@@ -21,3 +21,6 @@ The difference between them is that the Rmarkdown contains more comments and tes
 
 ### DAG_try.py
 This is a Python file used for scheduling in Apache Airflow, inspired from the schedular example of the online tutorial https://www.shizidushu.com/2019/03/03/schedule-r-script-with-docker-and-airflow/.  
+
+### NLP and Topic Modeling
+The CSV file "paper0628To0702.csv" contains the meta data for 670 new submitted papers from June 28 to July 2. Based on the paper titles and description, text mining and topic modeling using LDA are conducted, where the code file is "NLP and Topic Modeling.R" and the output file is "Output of NLP and Topic Modeling.html". Based on the wordcloud and the topic models, we can see that deep learning with neural network is still the hottest topic. Moreover, the study of the adversarial problem of the graphs or image analysis is one of the most popular topic in the DL study.
